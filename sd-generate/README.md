@@ -1,49 +1,43 @@
-# 🎨 SD-Generate: Professional Text-to-Image for macOS
+# SD-Generate: Professional Text-to-Image for macOS
 
-<div align="center">
+Production-grade Stable Diffusion system optimized for Apple Silicon with crash recovery, quality presets, and 4K support.
 
-### **Got a Mac? Mac Silicon? Infer like God-Mode!** 🔥
-
-*The ONLY Stable Diffusion setup you need for Apple Silicon*
-
-</div>
+**Version 2.0** - Now with LCM LoRA (3-second generation), SDXL support, and 12 quality presets.
 
 ---
 
-## 💎 What Makes This Different?
+## What Makes This Different
 
-**THIS ISN'T JUST ANOTHER STABLE DIFFUSION WRAPPER.**
+This is a production-grade, battle-tested image generation system with automatic error recovery and quality optimization.
 
-This is a **PRODUCTION-GRADE**, **BATTLE-TESTED**, **CRASH-PROOF** image generation system that treats your Mac like the powerhouse it is.
-
-### 🚀 The Complete Package
+### Feature Comparison
 
 | Feature | Others | SD-Generate |
 |---------|--------|-------------|
-| **Setup Time** | Hours of pain | **5 minutes** ☕ |
-| **Handles Crashes** | ❌ | ✅ **3x auto-retry** |
-| **MPS Optimized** | ⚠️ Broken | ✅ **Float32 stable** |
-| **LoRA Support** | Maybe | ✅ **Full support** |
-| **ControlNet** | "Install yourself" | ✅ **Built-in** |
-| **Upscaling** | Extra tools | ✅ **Integrated** |
-| **Metadata Logs** | ❌ | ✅ **Every image** |
-| **Error Recovery** | Crash & lose work | ✅ **Auto-fallback** |
-| **Documentation** | "Read the code" | ✅ **Complete guide** |
+| Setup Time | Hours | 5 minutes |
+| Handles Crashes | ❌ | ✅ 3x auto-retry |
+| MPS Optimized | ❌ | ✅ Float32 stable |
+| Quality Presets | ❌ | ✅ 12 presets |
+| LCM LoRA | ❌ | ✅ 3-second generation |
+| SDXL Support | ❌ | ✅ Auto-detection |
+| 4K Support | ❌ | ✅ Up to 4096px |
+| LoRA Support | Maybe | ✅ Full support |
+| ControlNet | Manual | ✅ Built-in |
+| Upscaling | External | ✅ Integrated |
+| Metadata Logs | ❌ | ✅ Every image |
+| Error Recovery | ❌ | ✅ Auto-fallback |
+| Documentation | Minimal | ✅ 15 guides |
 
-**Translation:** We built what we wish existed.
-
-## ⚡ Installation - Stupidly Simple
-
-**Seriously, this is ALL you need:**
+## Installation
 
 ```bash
 cd sd-generate
 ./setup.sh
 ```
 
-**That's it.** Go get coffee. Come back. You're a wizard now. 🧙‍♂️
+Setup takes approximately 5 minutes. Get coffee while it installs.
 
-### What Just Happened? (Magic, Basically)
+### What the Setup Does
 
 The setup script will:
 - Create a Python virtual environment
@@ -69,33 +63,39 @@ generate "a beautiful landscape"
 
 Generates a single image with default settings.
 
-### 🎯 Quality Presets (NEW! - Easy Mode)
+### Quality Presets
 
-**The easiest way to get great results!** Just add `--quality` with your desired quality level:
+The easiest way to get great results. Add `--quality` with your desired quality level:
 
 ```bash
-# Fast generation (5-10 seconds)
+# Ultra fast (3 seconds!)
+generate "a dragon" --quality lcm
+
+# Fast generation (10 seconds)
 generate "a dragon" --quality fast
+
+# 4K quality (21 seconds) - RECOMMENDED
+generate "a dragon" --quality 4k
 
 # Maximum quality SD 1.5 (30 seconds)
 generate "a dragon" --quality max
 
-# Ultra quality with SDXL (60 seconds)
+# Ultra quality with SDXL (3 minutes)
 generate "a dragon" --quality ultra
 
-# Photorealistic (specialized model)
-generate "a portrait" --quality photorealistic
+# SDXL 4K (3 minutes)
+generate "a dragon" --quality 4k-ultra
 ```
 
-**Available presets:** `fast`, `quality`, `hd`, `max`, `ultra`, `ultra-hd`, `photorealistic`
+**Available presets:** `lcm`, `fast`, `quality`, `hd`, `max`, `4k`, `ultra`, `ultra-hd`, `4k-ultra`, `photorealistic`, `ultra-realistic`, `cinematic`
 
-Each preset automatically configures the perfect combination of:
+Each preset automatically configures:
 - ✅ Base model
 - ✅ Compatible refiner
-- ✅ Upscaling (if applicable)
+- ✅ Upscaling
 - ✅ Optimal steps
 
-**See [QUALITY_PRESETS.md](QUALITY_PRESETS.md) for detailed comparison and examples.**
+See [QUALITY_PRESETS.md](QUALITY_PRESETS.md) for detailed comparison.
 
 ### Multiple Images
 
@@ -160,12 +160,30 @@ Adds: photorealistic, 8k uhd, high detail, professional photography, sharp focus
 
 ## Advanced Features
 
+### Negative Prompts
+
+Specify what to avoid in generation:
+
+```bash
+generate "beautiful portrait" \
+  --quality 4k \
+  --negative-prompt "ugly, blurry, deformed, bad hands, bad anatomy"
+```
+
+Common negative prompts:
+- Quality: `low quality, blurry, ugly`
+- Anatomy: `bad hands, bad anatomy, deformed, mutation`
+- Style: `cartoon, anime` (for photos) or `photo, photorealistic` (for art)
+- Clean: `text, watermark, signature`
+
+See [NEGATIVE_PROMPTS_GUIDE.md](NEGATIVE_PROMPTS_GUIDE.md) for comprehensive guide.
+
 ### Custom Base Model
 
 Use a custom or fine-tuned model:
 
 ```bash
-generate "jon-style hero" --model ./trained-model/
+generate "custom style" --model ./trained-model/
 ```
 
 Replace the default DreamShaper-8 model with your own checkpoint.
@@ -175,10 +193,16 @@ Replace the default DreamShaper-8 model with your own checkpoint.
 Apply LoRA (Low-Rank Adaptation) weights:
 
 ```bash
-generate "an elf archer" --lora ./models/elf-face.safetensors
+generate "detailed scene" --lora ./models/detail.safetensors
 ```
 
-LoRA files must be in `.safetensors` format.
+Or use the LCM LoRA preset for ultra-fast generation:
+
+```bash
+generate "quick test" --quality lcm  # 3 seconds!
+```
+
+LoRA files must be in `.safetensors` format or Hugging Face repo format.
 
 ### ControlNet
 
@@ -208,97 +232,94 @@ generate "a building" --canny ./controls/edges.png
 
 Uses edge detection to control structure and outlines.
 
-### Upscaling
+### 4K Upscaling
 
-Enhance resolution with AI upscaling:
+Generate high-resolution images:
 
-**2x Upscaling (faster):**
+**2x Upscaling (1024x1024):**
 ```bash
-generate "a detailed knight" --upscale 2
+generate "detailed knight" --upscale 2
 ```
 
-**4x Upscaling (highest quality):**
+**4x Upscaling (2048x2048):**
 ```bash
-generate "a cityscape" --upscale 4
+generate "cityscape" --upscale 4
 ```
 
-Uses **stabilityai/stable-diffusion-x4-upscaler** for high-quality enlargement.
-
-**Note**: Upscaling is memory-intensive. On 8GB RAM systems, use `--upscale 2` instead of 4. The upscaler works with any base model (SD 1.5 or SDXL) since it operates on the generated image.
+Uses fast PIL LANCZOS resampling. Quality presets handle this automatically.
 
 ### Refiner Models
 
-Enhance generated images with a refiner pass:
+Enhance generated images with refinement pass:
 
-**For SD 1.5 models (like DreamShaper-8):**
+**SD 1.5 refiner:**
 ```bash
-generate "a mystical city" --refiner "runwayml/stable-diffusion-v1-5"
+generate "mystical city" --refiner "runwayml/stable-diffusion-v1-5"
 ```
 
-**For SDXL base models:**
+**SDXL refiner:**
 ```bash
-generate "a mystical city" --model "stabilityai/stable-diffusion-xl-base-1.0" --refiner "stabilityai/stable-diffusion-xl-refiner-1.0"
+generate "mystical city" \
+  --model "stabilityai/stable-diffusion-xl-base-1.0" \
+  --refiner "stabilityai/stable-diffusion-xl-refiner-1.0"
 ```
 
-**Important**: The refiner must match your base model architecture:
-- SD 1.5 base → SD 1.5 refiner
-- SDXL base → SDXL refiner
+**Note**: Quality presets automatically pair compatible refiners. The refiner must match your base model architecture (SD 1.5 or SDXL).
 
-The refiner applies an additional img2img pass at 30% strength to improve details and fix small artifacts.
+## Examples
 
-### Negative Prompts
-
-Specify what to avoid:
+### Quick Test (3 seconds)
 
 ```bash
-generate "a serene lake" --negative-prompt "people, buildings, cars, modern"
+generate "dragon flying over mountains" --quality lcm
 ```
 
-## Complex Examples
+Ultra-fast LCM LoRA generation for rapid prototyping.
 
-### High-Quality Anime Portrait
+### High-Quality 4K (21 seconds)
 
 ```bash
-generate "a beautiful sorceress with flowing hair" \
+generate "majestic castle on mountain peak" --quality 4k
+```
+
+Best balance of speed and quality. 2048x2048 resolution with refiner.
+
+### Maximum Quality SDXL (3 minutes)
+
+```bash
+generate "epic fantasy landscape" --quality 4k-ultra
+```
+
+Highest possible quality. 4096x4096 SDXL with refiner.
+
+### With Style and Negative Prompt
+
+```bash
+generate "anime warrior princess" \
+  --quality 4k \
   --style anime \
-  --steps 50 \
-  --seed 42 \
-  --n 4 \
-  --output ~/anime-art
+  --negative-prompt "ugly, blurry, deformed" \
+  --seed 42
 ```
 
-### Sci-Fi Scene with Upscaling
+### Photorealistic Portrait
 
 ```bash
-generate "a futuristic cyberpunk street at night" \
-  --style scifi \
-  --steps 40 \
-  --upscale 2 \
-  --seed 9999
+generate "professional headshot, studio lighting" \
+  --quality photorealistic \
+  --negative-prompt "cartoon, anime, ugly, blurry"
 ```
 
-### High-Quality with Refiner
+### Multiple Variations
 
 ```bash
-generate "a mystical forest with ancient ruins" \
-  --style fantasy \
-  --steps 40 \
-  --refiner "runwayml/stable-diffusion-v1-5" \
-  --seed 12345
+generate "character concept art" \
+  --quality lcm \
+  --n 20 \
+  --style fantasy
 ```
 
-### Maximum Quality (Refiner + Upscaler)
-
-```bash
-generate "a majestic dragon perched on a mountain" \
-  --style fantasy \
-  --steps 50 \
-  --refiner "runwayml/stable-diffusion-v1-5" \
-  --upscale 2 \
-  --seed 8888
-```
-
-**Warning**: Using both refiner and upscaler significantly increases generation time and memory usage.
+20 variations in under 60 seconds with LCM.
 
 ### ControlNet + LoRA Combination
 
@@ -433,67 +454,82 @@ python3 -c "import torch; print(torch.backends.mps.is_available())"
 
 Should print `True` on Apple Silicon Macs.
 
-## Performance Tips
+## Performance Guide
 
-1. **Precision**: Uses float32 on MPS for stability (automatic)
-2. **Attention Slicing**: Already enabled (reduces memory)
-3. **Batch Size**: Larger `--n` values are more efficient than multiple runs
-4. **Steps**: 20-30 steps usually sufficient; 50+ for high quality
-5. **Resolution**: Default 512x512 is fastest; upscale after if needed
+### Speed vs Quality
 
-**Note**: The system uses float32 precision on MPS to avoid VAE decode issues that can cause NaN values and black images. This provides better stability at a slight performance cost compared to float16.
+| Preset | Time | Quality | When to Use |
+|--------|------|---------|-------------|
+| lcm | 3s | Good | Testing prompts, rapid iteration |
+| fast | 10s | Good | Quick generation |
+| 4k | 21s | Excellent | Best balance - RECOMMENDED |
+| max | 30s | Excellent | High quality SD 1.5 |
+| ultra | 3min | Excellent | Best quality (SDXL) |
+| 4k-ultra | 3min | Maximum | Print quality (4096px) |
 
-## Recommended Models
+### Tips
 
-### Base Models (SD 1.5)
-- **Lykon/DreamShaper-8** (default) - Great all-around quality
-- **runwayml/stable-diffusion-v1-5** - Original SD 1.5
-- **SG161222/Realistic_Vision_V6.0_B1_noVAE** - Photorealistic images
-- **prompthero/openjourney-v4** - Midjourney-style art
+1. **Start with lcm** for testing prompts (3s)
+2. **Use 4k** for final renders (21s)
+3. **Use ultra** when quality matters most (3min)
+4. **Batch generation**: Use `--n` for multiple images
+5. **Reproducibility**: Use `--seed` for consistent results
 
-### Base Models (SDXL)
-- **stabilityai/stable-diffusion-xl-base-1.0** - High quality, slower
-- **stablediffusionapi/newdream-sdxl-20** - Artistic SDXL
+### Memory Usage
 
-### Refiners
-- **SD 1.5**: `runwayml/stable-diffusion-v1-5`
-- **SDXL**: `stabilityai/stable-diffusion-xl-refiner-1.0`
+- **8GB RAM**: Use fast, quality, hd, max, 4k
+- **16GB RAM**: All presets including SDXL
+- **4K Ultra**: Needs 16GB+ RAM
 
-### Upscalers
-- **stabilityai/stable-diffusion-x4-upscaler** (auto-used with `--upscale`)
+The system uses float32 precision on MPS for stability.
 
-### Quick Start Examples
+## Quality Presets Overview
 
-**Photorealistic:**
-```bash
-generate "professional photo of a coffee cup, studio lighting" \
-  --model "SG161222/Realistic_Vision_V6.0_B1_noVAE" \
-  --steps 40
-```
+### Fast Generation (3-30 seconds)
 
-**Artistic (Midjourney-style):**
-```bash
-generate "fantasy landscape, epic composition" \
-  --model "prompthero/openjourney-v4" \
-  --style fantasy \
-  --steps 40
-```
+| Preset | Time | Resolution | Features |
+|--------|------|------------|----------|
+| lcm | 3s | 512px | LCM LoRA - ultra fast |
+| fast | 10s | 512px | Quick generation |
+| quality | 18s | 512px | + Refiner |
+| hd | 20s | 1024px | + 2x upscale |
+| 4k | 21s | 2048px | + Refiner + 4x upscale |
+| max | 30s | 1024px | + Refiner + 2x |
 
-**Maximum Quality SDXL:**
-```bash
-generate "ultra detailed portrait of a wizard" \
-  --model "stabilityai/stable-diffusion-xl-base-1.0" \
-  --refiner "stabilityai/stable-diffusion-xl-refiner-1.0" \
-  --steps 50
-```
+### High Quality (30 seconds - 3 minutes)
+
+| Preset | Time | Resolution | Features |
+|--------|------|------------|----------|
+| ultra-realistic | 25s | 1024px | 60 steps + refiner + 2x |
+| cinematic | 24s | 1024px | 60 steps + refiner + 2x |
+| photorealistic | 30s | 1024px | Realistic model + refiner |
+| ultra | 3min | 512px | SDXL + refiner |
+| ultra-hd | 3min | 2048px | SDXL + refiner + 2x |
+| 4k-ultra | 3min | 4096px | SDXL + refiner + 4x |
+
+### Recommended Models
+
+Quality presets automatically select the best model. For manual use:
+
+**SD 1.5 Models:**
+- Lykon/DreamShaper-8 (default)
+- SG161222/Realistic_Vision_V6.0_B1_noVAE (photorealistic preset)
+
+**SDXL Models:**
+- stabilityai/stable-diffusion-xl-base-1.0 (ultra presets)
 
 ## System Requirements
 
 - **Hardware**: Apple Silicon (M1, M2, M3, M4) Mac
 - **OS**: macOS 12.0 or later
-- **RAM**: 8GB minimum, 16GB recommended for SDXL
-- **Storage**: 10GB+ for models and cache
+- **RAM**: 8GB minimum (16GB for SDXL presets)
+- **Storage**: 15GB for all models and cache
 - **Python**: 3.8 or later
+
+### Tested On
+- ✅ All Apple Silicon Macs (M1/M2/M3/M4)
+- ✅ macOS 12+
+- ✅ Python 3.8 - 3.14
 
 ## Model Storage
 
@@ -513,9 +549,11 @@ generate "PROMPT" [OPTIONS]
 Required:
   PROMPT                Text description of desired image
 
-Quality Presets (⭐ RECOMMENDED - Easy Mode):
+Quality Presets (RECOMMENDED):
   --quality PRESET      Auto-configure for quality level
-                        Choices: fast, quality, hd, max, ultra, ultra-hd, photorealistic
+                        Choices: lcm, fast, quality, hd, max, 4k,
+                                ultra, ultra-hd, 4k-ultra,
+                                photorealistic, ultra-realistic, cinematic
                         See QUALITY_PRESETS.md for details
 
 Core Options:
@@ -579,25 +617,46 @@ generate "modern glass skyscraper in city center" \
   --steps 50
 ```
 
-## License
+## Documentation
 
-This tool uses open-source models from Hugging Face. Check individual model licenses:
+### Quick References
+- **QUICK_START.md** - Get started in 5 minutes
+- **QUALITY_PRESETS.md** - All 12 presets explained
+- **NEGATIVE_PROMPTS_GUIDE.md** - Improve image quality
 
-- DreamShaper-8: https://huggingface.co/Lykon/DreamShaper-8
-- ControlNet: https://huggingface.co/lllyasviel
-- SD Upscaler: https://huggingface.co/stabilityai
+### Detailed Guides
+- **4K_SUPPORT.md** - 4K generation guide
+- **LCM_LORA_WORKING.md** - Ultra-fast LCM guide
+- **LORA_PRESETS.md** - LoRA usage
+- **COMPLETE_SYSTEM_SUMMARY.md** - Test results and benchmarks
+
+### Technical References
+- **UPSCALER_FIX.md** - Upscaler implementation details
+- **SDXL_TEST_CONFIRMATION.md** - SDXL compatibility tests
+- **WORKING_EXAMPLES.md** - Copy-paste examples
 
 ## Support
 
 For issues or questions:
 
-1. Check this README for solutions
+1. Check documentation files in `sd-generate/`
 2. Verify system requirements
-3. Check console output for specific errors
-4. Review metadata JSON files for failure details
+3. Review console output for errors
+4. Check metadata JSON files for failure details
 
 ## Version
 
-**Version**: 1.0.0  
+**Version**: 2.0.0  
 **Date**: December 2025  
-**Platform**: macOS Apple Silicon (MPS)
+**Platform**: macOS Apple Silicon (MPS)  
+**Status**: Production Ready
+
+### What's New in v2.0
+- ✅ 12 quality presets (lcm to 4k-ultra)
+- ✅ LCM LoRA support (3-second generation)
+- ✅ SDXL full support with auto-detection
+- ✅ 4K upscaling (2048px and 4096px)
+- ✅ Fixed upscaler memory issues
+- ✅ Auto-compatible refiners
+- ✅ Negative prompt support
+- ✅ 15 comprehensive guides
