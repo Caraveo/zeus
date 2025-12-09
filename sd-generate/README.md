@@ -1,0 +1,466 @@
+# SD-Generate: Robust Text-to-Image Generation for macOS
+
+A complete, fault-tolerant text-to-image generation system optimized for Apple Silicon with MPS acceleration.
+
+## Features
+
+- **MPS Acceleration**: Optimized for Apple Silicon GPUs (NO CUDA)
+- **Retry Logic**: Automatic recovery from failures with up to 3 retries per operation
+- **Multiple Models**: Support for base models, LoRA, ControlNet, and refiners
+- **Style Presets**: Built-in anime, fantasy, scifi, and realism styles
+- **Upscaling**: AI-powered 2x and 4x upscaling
+- **Batch Generation**: Generate multiple images in one command
+- **Metadata Logging**: Complete JSON logs for every generation
+- **Fault Tolerance**: Graceful degradation when components fail
+
+## Installation
+
+```bash
+cd sd-generate
+./setup.sh
+```
+
+The setup script will:
+- Create a Python virtual environment
+- Install PyTorch with MPS support
+- Install all required dependencies
+- Create the `generate` CLI command
+- Run validation tests
+- Set up symlinks for easy access
+
+After installation, you can immediately use:
+
+```bash
+generate "your prompt here"
+```
+
+## Basic Usage
+
+### Simple Generation
+
+```bash
+generate "a beautiful landscape"
+```
+
+Generates a single image with default settings.
+
+### Multiple Images
+
+```bash
+generate "a dragon" --n 6
+```
+
+Generates 6 different variations of the prompt.
+
+### Custom Steps and Seed
+
+```bash
+generate "sunset over mountains" --steps 50 --seed 12345
+```
+
+- `--steps`: Number of inference steps (higher = better quality, slower)
+- `--seed`: Random seed for reproducibility
+
+### Output Directory
+
+```bash
+generate "a castle" --output ~/my-images
+```
+
+Save images to a specific directory (default: `./outputs`)
+
+## Style Presets
+
+Apply pre-configured style modifiers:
+
+### Anime Style
+
+```bash
+generate "a warrior princess" --style anime
+```
+
+Adds: anime style, highly detailed, vibrant colors, cel shaded, studio quality
+
+### Fantasy Style
+
+```bash
+generate "a magical forest" --style fantasy
+```
+
+Adds: fantasy art, magical, ethereal, detailed, epic, concept art style
+
+### Sci-Fi Style
+
+```bash
+generate "a spaceship" --style scifi
+```
+
+Adds: sci-fi, futuristic, high-tech, detailed, concept art, cyberpunk aesthetic
+
+### Realism Style
+
+```bash
+generate "a portrait" --style realism
+```
+
+Adds: photorealistic, 8k uhd, high detail, professional photography, sharp focus
+
+## Advanced Features
+
+### Custom Base Model
+
+Use a custom or fine-tuned model:
+
+```bash
+generate "jon-style hero" --model ./trained-model/
+```
+
+Replace the default DreamShaper-8 model with your own checkpoint.
+
+### LoRA Weights
+
+Apply LoRA (Low-Rank Adaptation) weights:
+
+```bash
+generate "an elf archer" --lora ./models/elf-face.safetensors
+```
+
+LoRA files must be in `.safetensors` format.
+
+### ControlNet
+
+Guide generation with control images:
+
+#### Pose Control
+
+```bash
+generate "anime girl dancing" --pose ./controls/pose.png
+```
+
+Uses OpenPose skeleton to control character pose.
+
+#### Depth Control
+
+```bash
+generate "a room interior" --depth ./controls/depth.png
+```
+
+Uses depth map to control spatial composition.
+
+#### Canny Edge Control
+
+```bash
+generate "a building" --canny ./controls/edges.png
+```
+
+Uses edge detection to control structure and outlines.
+
+### Upscaling
+
+Enhance resolution with AI upscaling:
+
+```bash
+generate "a detailed knight" --upscale 2
+```
+
+or
+
+```bash
+generate "a cityscape" --upscale 4
+```
+
+Uses Stable Diffusion X4 Upscaler for high-quality enlargement.
+
+### Refiner Models
+
+Enhance generated images with a refiner pass:
+
+```bash
+generate "a mystical city" --refiner stabilityai/stable-diffusion-xl-refiner-1.0
+```
+
+The refiner applies an additional img2img pass to improve details.
+
+### Negative Prompts
+
+Specify what to avoid:
+
+```bash
+generate "a serene lake" --negative-prompt "people, buildings, cars, modern"
+```
+
+## Complex Examples
+
+### High-Quality Anime Portrait
+
+```bash
+generate "a beautiful sorceress with flowing hair" \
+  --style anime \
+  --steps 50 \
+  --seed 42 \
+  --n 4 \
+  --output ~/anime-art
+```
+
+### Sci-Fi Scene with Upscaling
+
+```bash
+generate "a futuristic cyberpunk street at night" \
+  --style scifi \
+  --steps 40 \
+  --upscale 2 \
+  --seed 9999
+```
+
+### ControlNet + LoRA Combination
+
+```bash
+generate "a hero in epic armor" \
+  --pose ./pose-reference.png \
+  --lora ./armor-lora.safetensors \
+  --style fantasy \
+  --steps 60
+```
+
+### DreamBooth Custom Model
+
+```bash
+generate "ohwx-style portrait of a warrior" \
+  --model ./dreambooth-models/my-style \
+  --steps 50 \
+  --n 8
+```
+
+## Error Handling & Retry Logic
+
+SD-Generate includes comprehensive error handling:
+
+### Automatic Retries
+
+- **Pipeline Loading**: 3 attempts to load base model
+- **LoRA Loading**: 3 attempts, falls back to base model if failed
+- **ControlNet**: 3 attempts, falls back to base generation if failed
+- **Generation**: 3 attempts with exponential backoff
+- **Upscaling**: 3 attempts, saves base resolution if failed
+- **Refinement**: 3 attempts, saves unrefined image if failed
+
+### Graceful Degradation
+
+When a component fails after all retries:
+
+1. **LoRA Failure**: Continues with base model only
+2. **ControlNet Failure**: Falls back to standard text-to-image
+3. **Upscaling Failure**: Saves base resolution images
+4. **Refiner Failure**: Saves unrefined images
+5. **Generation Failure**: Reports fatal error (cannot recover)
+
+### Metadata Logging
+
+Every generation creates a JSON file with complete metadata:
+
+```json
+{
+  "prompt": "a beautiful landscape",
+  "negative_prompt": "",
+  "seed": 42,
+  "steps": 30,
+  "style": "fantasy",
+  "model": "Lykon/DreamShaper-8",
+  "lora": null,
+  "controlnet": null,
+  "upscale": 2,
+  "refiner": null,
+  "generation_time": 45.3,
+  "device": "mps",
+  "pipeline_type": "StableDiffusionPipeline",
+  "failures": [],
+  "warnings": [
+    {
+      "message": "LoRA loading failed - continuing without LoRA",
+      "timestamp": "2025-12-09T15:30:45.123456"
+    }
+  ]
+}
+```
+
+## Output Format
+
+### Image Files
+
+```
+output_2025-12-09_15-30-45_001.png
+output_2025-12-09_15-30-45_002.png
+output_2025-12-09_15-30-45_003.png
+```
+
+Timestamped filenames with sequential numbering.
+
+### Metadata Files
+
+```
+output_2025-12-09_15-30-45_001.json
+output_2025-12-09_15-30-45_002.json
+output_2025-12-09_15-30-45_003.json
+```
+
+Complete generation parameters and status for each image.
+
+## Troubleshooting
+
+### Setup Issues
+
+If `setup.sh` fails:
+
+1. Ensure Python 3.8+ is installed: `python3 --version`
+2. Install Python if needed: `brew install python3`
+3. Re-run setup: `./setup.sh`
+
+### Generation Failures
+
+If generation consistently fails:
+
+1. Check available memory: MPS requires sufficient RAM
+2. Reduce batch size: Use `--n 1` instead of larger values
+3. Reduce steps: Use `--steps 20` for faster testing
+4. Check model compatibility: Some models may not support MPS
+
+### Path Issues
+
+If `generate` command not found:
+
+```bash
+# Add to ~/.zshrc or ~/.bashrc
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+Then reload: `source ~/.zshrc`
+
+### MPS Acceleration
+
+Verify MPS is available:
+
+```python
+python3 -c "import torch; print(torch.backends.mps.is_available())"
+```
+
+Should print `True` on Apple Silicon Macs.
+
+## Performance Tips
+
+1. **Precision**: Uses float32 on MPS for stability (automatic)
+2. **Attention Slicing**: Already enabled (reduces memory)
+3. **Batch Size**: Larger `--n` values are more efficient than multiple runs
+4. **Steps**: 20-30 steps usually sufficient; 50+ for high quality
+5. **Resolution**: Default 512x512 is fastest; upscale after if needed
+
+**Note**: The system uses float32 precision on MPS to avoid VAE decode issues that can cause NaN values and black images. This provides better stability at a slight performance cost compared to float16.
+
+## System Requirements
+
+- **Hardware**: Apple Silicon (M1, M2, M3, M4) Mac
+- **OS**: macOS 12.0 or later
+- **RAM**: 8GB minimum, 16GB recommended
+- **Storage**: 10GB+ for models and cache
+- **Python**: 3.8 or later
+
+## Model Storage
+
+Models are automatically downloaded to:
+
+```
+~/.cache/huggingface/
+```
+
+First run will download ~5GB of models. Subsequent runs use cached models.
+
+## Command Reference
+
+```
+generate "PROMPT" [OPTIONS]
+
+Required:
+  PROMPT                Text description of desired image
+
+Core Options:
+  --model PATH          Custom base model path
+  --output DIR          Output directory (default: ./outputs)
+  --n NUM               Number of images (default: 1)
+  --steps NUM           Inference steps (default: 30)
+  --seed NUM            Random seed (default: 42)
+  --negative-prompt STR Text to avoid in generation
+
+Style:
+  --style STYLE         Preset: anime, fantasy, scifi, realism
+
+LoRA:
+  --lora PATH           LoRA weights file (.safetensors)
+
+ControlNet:
+  --pose PATH           Pose control image
+  --depth PATH          Depth control image
+  --canny PATH          Canny edge control image
+
+Post-Processing:
+  --upscale FACTOR      Upscale by 2x or 4x
+  --refiner MODEL       Refiner model name
+```
+
+## Examples Gallery
+
+### Quick Test
+
+```bash
+generate "a red circle"
+```
+
+Simple test to verify installation.
+
+### Artistic Generation
+
+```bash
+generate "an oil painting of a sunset over the ocean" \
+  --steps 50 \
+  --seed 7777 \
+  --style realism
+```
+
+### Character Design
+
+```bash
+generate "a cyberpunk hacker with neon implants" \
+  --style anime \
+  --n 10 \
+  --steps 40
+```
+
+### Architecture
+
+```bash
+generate "modern glass skyscraper in city center" \
+  --style realism \
+  --upscale 4 \
+  --steps 50
+```
+
+## License
+
+This tool uses open-source models from Hugging Face. Check individual model licenses:
+
+- DreamShaper-8: https://huggingface.co/Lykon/DreamShaper-8
+- ControlNet: https://huggingface.co/lllyasviel
+- SD Upscaler: https://huggingface.co/stabilityai
+
+## Support
+
+For issues or questions:
+
+1. Check this README for solutions
+2. Verify system requirements
+3. Check console output for specific errors
+4. Review metadata JSON files for failure details
+
+## Version
+
+**Version**: 1.0.0  
+**Date**: December 2025  
+**Platform**: macOS Apple Silicon (MPS)
