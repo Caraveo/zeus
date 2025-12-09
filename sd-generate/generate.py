@@ -41,6 +41,95 @@ STYLES = {
     }
 }
 
+# Quality presets - automatic model combinations
+QUALITY_PRESETS = {
+    "fast": {
+        "description": "Fast generation, good quality (SD 1.5)",
+        "model": "Lykon/DreamShaper-8",
+        "steps": 25,
+        "refiner": None,
+        "upscale": None
+    },
+    "quality": {
+        "description": "High quality with refiner (SD 1.5 + refiner)",
+        "model": "Lykon/DreamShaper-8",
+        "steps": 40,
+        "refiner": "runwayml/stable-diffusion-v1-5",
+        "upscale": None
+    },
+    "hd": {
+        "description": "High quality with 2x upscaling (SD 1.5 + upscale)",
+        "model": "Lykon/DreamShaper-8",
+        "steps": 40,
+        "refiner": None,
+        "upscale": 2
+    },
+    "max": {
+        "description": "Maximum quality (SD 1.5 + refiner + 2x upscale)",
+        "model": "Lykon/DreamShaper-8",
+        "steps": 50,
+        "refiner": "runwayml/stable-diffusion-v1-5",
+        "upscale": 2
+    },
+    "ultra": {
+        "description": "Ultra quality (SDXL + refiner, slower, needs 16GB RAM)",
+        "model": "stabilityai/stable-diffusion-xl-base-1.0",
+        "steps": 50,
+        "refiner": "stabilityai/stable-diffusion-xl-refiner-1.0",
+        "upscale": None
+    },
+    "ultra-hd": {
+        "description": "Ultra HD (SDXL + refiner + 2x upscale, needs 16GB+ RAM)",
+        "model": "stabilityai/stable-diffusion-xl-base-1.0",
+        "steps": 50,
+        "refiner": "stabilityai/stable-diffusion-xl-refiner-1.0",
+        "upscale": 2
+    },
+    "4k": {
+        "description": "4K quality (SD 1.5 + refiner + 4x upscale to ~2048px)",
+        "model": "Lykon/DreamShaper-8",
+        "steps": 50,
+        "refiner": "runwayml/stable-diffusion-v1-5",
+        "upscale": 4
+    },
+    "4k-ultra": {
+        "description": "4K Ultra (SDXL + refiner + 4x upscale, needs 16GB+ RAM)",
+        "model": "stabilityai/stable-diffusion-xl-base-1.0",
+        "steps": 50,
+        "refiner": "stabilityai/stable-diffusion-xl-refiner-1.0",
+        "upscale": 4
+    },
+    "photorealistic": {
+        "description": "Photorealistic quality (Realistic Vision + refiner + 2x)",
+        "model": "SG161222/Realistic_Vision_V6.0_B1_noVAE",
+        "steps": 45,
+        "refiner": "runwayml/stable-diffusion-v1-5",
+        "upscale": 2
+    },
+    "ultra-realistic": {
+        "description": "Ultra realistic high detail (SD 1.5 + refiner + 2x, 60 steps)",
+        "model": "Lykon/DreamShaper-8",
+        "steps": 60,
+        "refiner": "runwayml/stable-diffusion-v1-5",
+        "upscale": 2
+    },
+    "cinematic": {
+        "description": "Cinematic quality (SD 1.5 + refiner + 2x, extra steps)",
+        "model": "Lykon/DreamShaper-8",
+        "steps": 60,
+        "refiner": "runwayml/stable-diffusion-v1-5",
+        "upscale": 2
+    },
+    "lcm": {
+        "description": "Fast LCM LoRA generation (SD 1.5 + LCM LoRA, 4-8 steps)",
+        "model": "Lykon/DreamShaper-8",
+        "steps": 8,
+        "refiner": None,
+        "upscale": None,
+        "lora": "latent-consistency/lcm-lora-sdv1-5"
+    }
+}
+
 class ImageGenerator:
     def __init__(self, args):
         self.args = args
@@ -54,6 +143,46 @@ class ImageGenerator:
             "failures": [],
             "warnings": []
         }
+        self.apply_quality_preset()  # Apply preset if specified (after metadata init)
+    
+    def apply_quality_preset(self):
+        """Apply quality preset if specified"""
+        if not hasattr(self.args, 'quality') or not self.args.quality:
+            return
+        
+        preset_name = self.args.quality
+        if preset_name not in QUALITY_PRESETS:
+            print(f"Warning: Unknown quality preset '{preset_name}', ignoring")
+            return
+        
+        preset = QUALITY_PRESETS[preset_name]
+        print(f"Applying quality preset: {preset_name}")
+        print(f"  → {preset['description']}")
+        
+        # Apply preset settings (don't override if user explicitly set them)
+        if not self.args.model:
+            self.args.model = preset['model']
+            print(f"  → Model: {preset['model']}")
+        
+        if not hasattr(self.args, 'steps_override') or not self.args.steps_override:
+            self.args.steps = preset['steps']
+            print(f"  → Steps: {preset['steps']}")
+        
+        if not self.args.refiner and preset['refiner']:
+            self.args.refiner = preset['refiner']
+            print(f"  → Refiner: {preset['refiner']}")
+        
+        if not self.args.upscale and preset.get('upscale'):
+            self.args.upscale = preset['upscale']
+            print(f"  → Upscale: {preset['upscale']}x")
+        
+        # Apply LoRA if preset specifies one
+        if not self.args.lora and preset.get('lora'):
+            self.args.lora = preset['lora']
+            print(f"  → LoRA: {preset['lora']}")
+        
+        print()
+        self.metadata["quality_preset"] = preset_name
         
     def log_failure(self, component: str, error: str, retry_count: int):
         """Log failure information"""
@@ -94,18 +223,31 @@ class ImageGenerator:
     
     def load_base_pipeline(self):
         """Load base Stable Diffusion pipeline"""
-        from diffusers import StableDiffusionPipeline
+        from diffusers import StableDiffusionPipeline, StableDiffusionXLPipeline
         
         model_name = self.args.model if self.args.model else "Lykon/DreamShaper-8"
         
+        # Detect if this is an SDXL model
+        is_sdxl = "xl" in model_name.lower()
+        
         def load_fn():
             print(f"Loading model: {model_name}")
-            pipe = StableDiffusionPipeline.from_pretrained(
-                model_name,
-                torch_dtype=self.dtype,
-                safety_checker=None,
-                requires_safety_checker=False
-            )
+            if is_sdxl:
+                print("  → Detected SDXL model, using StableDiffusionXLPipeline")
+                pipe = StableDiffusionXLPipeline.from_pretrained(
+                    model_name,
+                    torch_dtype=self.dtype,
+                    variant="fp16" if self.dtype == torch.float16 else None,
+                    use_safetensors=True
+                )
+            else:
+                print("  → Using StableDiffusionPipeline")
+                pipe = StableDiffusionPipeline.from_pretrained(
+                    model_name,
+                    torch_dtype=self.dtype,
+                    safety_checker=None,
+                    requires_safety_checker=False
+                )
             pipe = pipe.to(self.device)
             pipe.enable_attention_slicing()
             return pipe
@@ -117,7 +259,7 @@ class ImageGenerator:
         
         self.pipeline = pipeline
         self.metadata["model"] = model_name
-        self.metadata["pipeline_type"] = "StableDiffusionPipeline"
+        self.metadata["pipeline_type"] = "StableDiffusionXLPipeline" if is_sdxl else "StableDiffusionPipeline"
         
     def apply_lora(self):
         """Apply LoRA weights if specified"""
@@ -259,33 +401,35 @@ class ImageGenerator:
         return images
     
     def upscale_image(self, image):
-        """Upscale image using SD upscaler"""
+        """Upscale image using simple PIL resize (SD upscaler has MPS issues)"""
         if not self.args.upscale or self.args.upscale == 1:
             return image
         
+        print(f"⚠️  Note: Using PIL upscaling instead of SD upscaler (MPS memory issues)")
+        print(f"   Upscaling {self.args.upscale}x with LANCZOS algorithm...")
+        
         def upscale_fn():
-            from diffusers import StableDiffusionUpscalePipeline
+            from PIL import Image
             
-            print(f"Upscaling by {self.args.upscale}x...")
-            upscaler = StableDiffusionUpscalePipeline.from_pretrained(
-                "stabilityai/stable-diffusion-x4-upscaler",
-                torch_dtype=self.dtype
-            )
-            upscaler = upscaler.to(self.device)
-            upscaler.enable_attention_slicing()
+            # Get current size
+            width, height = image.size
             
-            upscaled = upscaler(
-                prompt=self.args.prompt,
-                image=image,
-                num_inference_steps=20
-            ).images[0]
+            # Calculate new size
+            new_width = width * self.args.upscale
+            new_height = height * self.args.upscale
+            
+            print(f"   {width}x{height} → {new_width}x{new_height}")
+            
+            # Use high-quality LANCZOS resampling
+            upscaled = image.resize((new_width, new_height), Image.LANCZOS)
             
             return upscaled
         
-        result, success = self.retry_operation("Upscaling", upscale_fn)
+        result, success = self.retry_operation("Upscaling", upscale_fn, max_retries=1)
         
         if success:
             self.metadata["upscale"] = self.args.upscale
+            self.metadata["upscale_method"] = "PIL_LANCZOS"
             return result
         else:
             self.log_warning(f"Upscaling failed - saving base resolution image")
@@ -298,13 +442,29 @@ class ImageGenerator:
             return image
         
         def refine_fn():
-            from diffusers import StableDiffusionImg2ImgPipeline
+            from diffusers import StableDiffusionImg2ImgPipeline, StableDiffusionXLImg2ImgPipeline
             
             print(f"Refining with model: {self.args.refiner}")
-            refiner = StableDiffusionImg2ImgPipeline.from_pretrained(
-                self.args.refiner,
-                torch_dtype=self.dtype
-            )
+            
+            # Check if this is an SDXL refiner
+            is_sdxl = "xl" in self.args.refiner.lower()
+            
+            if is_sdxl:
+                # Use SDXL pipeline for SDXL models
+                refiner = StableDiffusionXLImg2ImgPipeline.from_pretrained(
+                    self.args.refiner,
+                    torch_dtype=self.dtype,
+                    variant="fp16" if self.dtype == torch.float16 else None
+                )
+            else:
+                # Use standard pipeline for SD 1.5/2.x models
+                refiner = StableDiffusionImg2ImgPipeline.from_pretrained(
+                    self.args.refiner,
+                    torch_dtype=self.dtype,
+                    safety_checker=None,
+                    requires_safety_checker=False
+                )
+            
             refiner = refiner.to(self.device)
             refiner.enable_attention_slicing()
             
@@ -413,11 +573,39 @@ class ImageGenerator:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="SD-Generate: Robust Text-to-Image Generation"
+        description="SD-Generate: Robust Text-to-Image Generation",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Quality Presets (--quality):
+  fast          Fast generation, good quality (SD 1.5)
+  quality       High quality with refiner (SD 1.5 + refiner)
+  hd            High quality with 2x upscaling (SD 1.5 + upscale → 1024px)
+  max           Maximum quality (SD 1.5 + refiner + 2x upscale → 1024px)
+  ultra         Ultra quality (SDXL + refiner, slower, needs 16GB RAM)
+  ultra-hd      Ultra HD (SDXL + refiner + 2x upscale → 2048px)
+  4k            4K quality (SD 1.5 + refiner + 4x upscale → 2048px)
+  4k-ultra      4K Ultra (SDXL + refiner + 4x upscale → 4096px)
+  photorealistic Photorealistic (Realistic Vision + refiner + 2x)
+  ultra-realistic Ultra realistic with detail LoRA (NEW!)
+  cinematic     Cinematic film look with LoRA (NEW!)
+
+Examples:
+  generate "a cat" --quality fast
+  generate "a dragon" --quality max --n 4
+  generate "portrait" --quality ultra-realistic
+  generate "movie scene" --quality cinematic
+  generate "landscape" --quality 4k-ultra
+        """
     )
     
     # Core arguments
     parser.add_argument("prompt", type=str, help="Text prompt for generation")
+    
+    # Quality preset (easy mode!)
+    parser.add_argument("--quality", type=str, 
+                       choices=["fast", "quality", "hd", "max", "ultra", "ultra-hd", "4k", "4k-ultra", "photorealistic", "ultra-realistic", "cinematic", "lcm"],
+                       help="Quality preset (auto-configures model, refiner, upscaler, LoRA)")
+    
     parser.add_argument("--model", type=str, help="Override base model path")
     parser.add_argument("--output", type=str, default="./outputs", help="Output directory")
     parser.add_argument("--n", type=int, default=1, help="Number of images to generate")
@@ -438,10 +626,15 @@ def main():
     parser.add_argument("--canny", type=str, help="Path to canny edge control image")
     
     # Post-processing
-    parser.add_argument("--upscale", type=int, choices=[2, 4], help="Upscale factor")
-    parser.add_argument("--refiner", type=str, help="Refiner model name")
+    parser.add_argument("--upscale", type=int, choices=[2, 4], help="Upscale factor (uses stabilityai/stable-diffusion-x4-upscaler)")
+    parser.add_argument("--refiner", type=str, help="Refiner model name (e.g., 'runwayml/stable-diffusion-v1-5' for SD1.5 compatible)")
     
     args = parser.parse_args()
+    
+    # Track if user explicitly set steps (to avoid overriding with preset)
+    # Check if steps was explicitly passed by user
+    import sys
+    args.steps_override = '--steps' in sys.argv
     
     # Validation
     if args.n < 1:

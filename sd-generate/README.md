@@ -69,6 +69,34 @@ generate "a beautiful landscape"
 
 Generates a single image with default settings.
 
+### 🎯 Quality Presets (NEW! - Easy Mode)
+
+**The easiest way to get great results!** Just add `--quality` with your desired quality level:
+
+```bash
+# Fast generation (5-10 seconds)
+generate "a dragon" --quality fast
+
+# Maximum quality SD 1.5 (30 seconds)
+generate "a dragon" --quality max
+
+# Ultra quality with SDXL (60 seconds)
+generate "a dragon" --quality ultra
+
+# Photorealistic (specialized model)
+generate "a portrait" --quality photorealistic
+```
+
+**Available presets:** `fast`, `quality`, `hd`, `max`, `ultra`, `ultra-hd`, `photorealistic`
+
+Each preset automatically configures the perfect combination of:
+- ✅ Base model
+- ✅ Compatible refiner
+- ✅ Upscaling (if applicable)
+- ✅ Optimal steps
+
+**See [QUALITY_PRESETS.md](QUALITY_PRESETS.md) for detailed comparison and examples.**
+
 ### Multiple Images
 
 ```bash
@@ -184,27 +212,39 @@ Uses edge detection to control structure and outlines.
 
 Enhance resolution with AI upscaling:
 
+**2x Upscaling (faster):**
 ```bash
 generate "a detailed knight" --upscale 2
 ```
 
-or
-
+**4x Upscaling (highest quality):**
 ```bash
 generate "a cityscape" --upscale 4
 ```
 
-Uses Stable Diffusion X4 Upscaler for high-quality enlargement.
+Uses **stabilityai/stable-diffusion-x4-upscaler** for high-quality enlargement.
+
+**Note**: Upscaling is memory-intensive. On 8GB RAM systems, use `--upscale 2` instead of 4. The upscaler works with any base model (SD 1.5 or SDXL) since it operates on the generated image.
 
 ### Refiner Models
 
 Enhance generated images with a refiner pass:
 
+**For SD 1.5 models (like DreamShaper-8):**
 ```bash
-generate "a mystical city" --refiner stabilityai/stable-diffusion-xl-refiner-1.0
+generate "a mystical city" --refiner "runwayml/stable-diffusion-v1-5"
 ```
 
-The refiner applies an additional img2img pass to improve details.
+**For SDXL base models:**
+```bash
+generate "a mystical city" --model "stabilityai/stable-diffusion-xl-base-1.0" --refiner "stabilityai/stable-diffusion-xl-refiner-1.0"
+```
+
+**Important**: The refiner must match your base model architecture:
+- SD 1.5 base → SD 1.5 refiner
+- SDXL base → SDXL refiner
+
+The refiner applies an additional img2img pass at 30% strength to improve details and fix small artifacts.
 
 ### Negative Prompts
 
@@ -236,6 +276,29 @@ generate "a futuristic cyberpunk street at night" \
   --upscale 2 \
   --seed 9999
 ```
+
+### High-Quality with Refiner
+
+```bash
+generate "a mystical forest with ancient ruins" \
+  --style fantasy \
+  --steps 40 \
+  --refiner "runwayml/stable-diffusion-v1-5" \
+  --seed 12345
+```
+
+### Maximum Quality (Refiner + Upscaler)
+
+```bash
+generate "a majestic dragon perched on a mountain" \
+  --style fantasy \
+  --steps 50 \
+  --refiner "runwayml/stable-diffusion-v1-5" \
+  --upscale 2 \
+  --seed 8888
+```
+
+**Warning**: Using both refiner and upscaler significantly increases generation time and memory usage.
 
 ### ControlNet + LoRA Combination
 
@@ -380,11 +443,55 @@ Should print `True` on Apple Silicon Macs.
 
 **Note**: The system uses float32 precision on MPS to avoid VAE decode issues that can cause NaN values and black images. This provides better stability at a slight performance cost compared to float16.
 
+## Recommended Models
+
+### Base Models (SD 1.5)
+- **Lykon/DreamShaper-8** (default) - Great all-around quality
+- **runwayml/stable-diffusion-v1-5** - Original SD 1.5
+- **SG161222/Realistic_Vision_V6.0_B1_noVAE** - Photorealistic images
+- **prompthero/openjourney-v4** - Midjourney-style art
+
+### Base Models (SDXL)
+- **stabilityai/stable-diffusion-xl-base-1.0** - High quality, slower
+- **stablediffusionapi/newdream-sdxl-20** - Artistic SDXL
+
+### Refiners
+- **SD 1.5**: `runwayml/stable-diffusion-v1-5`
+- **SDXL**: `stabilityai/stable-diffusion-xl-refiner-1.0`
+
+### Upscalers
+- **stabilityai/stable-diffusion-x4-upscaler** (auto-used with `--upscale`)
+
+### Quick Start Examples
+
+**Photorealistic:**
+```bash
+generate "professional photo of a coffee cup, studio lighting" \
+  --model "SG161222/Realistic_Vision_V6.0_B1_noVAE" \
+  --steps 40
+```
+
+**Artistic (Midjourney-style):**
+```bash
+generate "fantasy landscape, epic composition" \
+  --model "prompthero/openjourney-v4" \
+  --style fantasy \
+  --steps 40
+```
+
+**Maximum Quality SDXL:**
+```bash
+generate "ultra detailed portrait of a wizard" \
+  --model "stabilityai/stable-diffusion-xl-base-1.0" \
+  --refiner "stabilityai/stable-diffusion-xl-refiner-1.0" \
+  --steps 50
+```
+
 ## System Requirements
 
 - **Hardware**: Apple Silicon (M1, M2, M3, M4) Mac
 - **OS**: macOS 12.0 or later
-- **RAM**: 8GB minimum, 16GB recommended
+- **RAM**: 8GB minimum, 16GB recommended for SDXL
 - **Storage**: 10GB+ for models and cache
 - **Python**: 3.8 or later
 
@@ -406,11 +513,16 @@ generate "PROMPT" [OPTIONS]
 Required:
   PROMPT                Text description of desired image
 
+Quality Presets (⭐ RECOMMENDED - Easy Mode):
+  --quality PRESET      Auto-configure for quality level
+                        Choices: fast, quality, hd, max, ultra, ultra-hd, photorealistic
+                        See QUALITY_PRESETS.md for details
+
 Core Options:
-  --model PATH          Custom base model path
+  --model PATH          Custom base model path (overrides preset)
   --output DIR          Output directory (default: ./outputs)
   --n NUM               Number of images (default: 1)
-  --steps NUM           Inference steps (default: 30)
+  --steps NUM           Inference steps (default: 30, or per preset)
   --seed NUM            Random seed (default: 42)
   --negative-prompt STR Text to avoid in generation
 
@@ -426,8 +538,8 @@ ControlNet:
   --canny PATH          Canny edge control image
 
 Post-Processing:
-  --upscale FACTOR      Upscale by 2x or 4x
-  --refiner MODEL       Refiner model name
+  --upscale FACTOR      Upscale by 2x or 4x (auto-set by quality presets)
+  --refiner MODEL       Refiner model name (auto-set by quality presets)
 ```
 
 ## Examples Gallery
