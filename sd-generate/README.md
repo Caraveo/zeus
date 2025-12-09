@@ -1,5 +1,7 @@
 # SD-Generate: Robust Text-to-Image Generation for macOS
 
+**Got a Mac? Mac Silicon? Infer like God-Mode!**
+
 A complete, fault-tolerant text-to-image generation system optimized for Apple Silicon with MPS acceleration.
 
 ## Features
