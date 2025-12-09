@@ -9,6 +9,8 @@ import torch
 import argparse
 import json
 import time
+import gc
+import psutil
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict, Any
@@ -127,8 +129,72 @@ QUALITY_PRESETS = {
         "refiner": None,
         "upscale": None,
         "lora": "latent-consistency/lcm-lora-sdv1-5"
+    },
+    "sd3.5": {
+        "description": "SD 3.5 Large Turbo (newest, fast, requires HF auth)",
+        "model": "stabilityai/stable-diffusion-3.5-large-turbo",
+        "steps": 8,
+        "refiner": None,
+        "upscale": None,
+        "use_sd3": True
+    },
+    "sd3.5-4k": {
+        "description": "SD 3.5 Large Turbo with 4K upscaling (requires HF auth)",
+        "model": "stabilityai/stable-diffusion-3.5-large-turbo",
+        "steps": 8,
+        "refiner": None,
+        "upscale": 4,
+        "use_sd3": True
     }
 }
+
+# Memory Management Utilities
+def cleanup_memory(aggressive=False):
+    """Clean up memory on MPS device"""
+    try:
+        # Collect Python garbage
+        gc.collect()
+        
+        # Clear MPS cache
+        if torch.backends.mps.is_available():
+            torch.mps.empty_cache()
+            
+        # Aggressive mode for SD 3.5
+        if aggressive:
+            gc.collect()
+            time.sleep(0.5)  # Give system time to release memory
+            if torch.backends.mps.is_available():
+                torch.mps.empty_cache()
+                
+    except Exception as e:
+        print(f"⚠️  Memory cleanup warning: {e}")
+
+def get_memory_info():
+    """Get current memory usage information"""
+    try:
+        process = psutil.Process()
+        mem_info = process.memory_info()
+        virtual_mem = psutil.virtual_memory()
+        
+        return {
+            "process_rss_gb": mem_info.rss / (1024**3),
+            "process_vms_gb": mem_info.vms / (1024**3),
+            "system_used_gb": virtual_mem.used / (1024**3),
+            "system_available_gb": virtual_mem.available / (1024**3),
+            "system_percent": virtual_mem.percent
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+def log_memory_status(label=""):
+    """Log current memory status"""
+    mem_info = get_memory_info()
+    if "error" not in mem_info:
+        print(f"💾 Memory [{label}]: Process={mem_info['process_rss_gb']:.1f}GB, "
+              f"System={mem_info['system_used_gb']:.1f}GB/{mem_info['system_used_gb'] + mem_info['system_available_gb']:.1f}GB "
+              f"({mem_info['system_percent']:.1f}%)")
+    else:
+        print(f"⚠️  Could not read memory info: {mem_info['error']}")
 
 class ImageGenerator:
     def __init__(self, args):
@@ -137,12 +203,18 @@ class ImageGenerator:
         # Use float32 on MPS to avoid VAE decode issues
         self.dtype = torch.float32
         self.pipeline = None
+        self.refiner_pipeline = None  # Keep track of refiner separately
+        self.is_sd3 = False  # Track if using SD 3.5
         self.metadata = {
             "device": self.device,
             "dtype": str(self.dtype),
             "failures": [],
             "warnings": []
         }
+        
+        # Log initial memory state
+        log_memory_status("Startup")
+        
         self.apply_quality_preset()  # Apply preset if specified (after metadata init)
     
     def apply_quality_preset(self):
@@ -180,6 +252,10 @@ class ImageGenerator:
         if not self.args.lora and preset.get('lora'):
             self.args.lora = preset['lora']
             print(f"  → LoRA: {preset['lora']}")
+        
+        # Mark if this is SD 3.5 model
+        if preset.get('use_sd3'):
+            self.args.use_sd3 = True
         
         print()
         self.metadata["quality_preset"] = preset_name
@@ -222,34 +298,92 @@ class ImageGenerator:
         return None, False
     
     def load_base_pipeline(self):
-        """Load base Stable Diffusion pipeline"""
-        from diffusers import StableDiffusionPipeline, StableDiffusionXLPipeline
+        """Load base Stable Diffusion pipeline with memory management"""
+        from diffusers import StableDiffusionPipeline, StableDiffusionXLPipeline, DiffusionPipeline
         
         model_name = self.args.model if self.args.model else "Lykon/DreamShaper-8"
         
-        # Detect if this is an SDXL model
+        # Detect model type
         is_sdxl = "xl" in model_name.lower()
+        is_sd3 = "3.5" in model_name or "3-5" in model_name or hasattr(self.args, 'use_sd3')
+        self.is_sd3 = is_sd3
+        
+        # Aggressive memory cleanup before loading large models
+        if is_sd3 or is_sdxl:
+            print("🧹 Preparing memory for large model...")
+            cleanup_memory(aggressive=True)
+            log_memory_status("Before model load")
         
         def load_fn():
             print(f"Loading model: {model_name}")
-            if is_sdxl:
+            
+            if is_sd3:
+                print("  → Detected SD 3.5 model (gated - requires HF authentication)")
+                print("  → Run ./login-hf.sh if not authenticated")
+                print("  → Enabling aggressive memory optimization for SD 3.5")
+                
+                # Clean memory before loading
+                cleanup_memory(aggressive=True)
+                
+                # Load with memory-efficient settings
+                pipe = DiffusionPipeline.from_pretrained(
+                    model_name,
+                    torch_dtype=torch.bfloat16,
+                    device_map=self.device,
+                    low_cpu_mem_usage=True,
+                    use_safetensors=True
+                )
+                
+                # Enable memory optimizations
+                try:
+                    pipe.enable_attention_slicing(slice_size="auto")
+                    print("  → Enabled attention slicing")
+                except:
+                    pass
+                
+                try:
+                    pipe.enable_vae_slicing()
+                    print("  → Enabled VAE slicing")
+                except:
+                    pass
+                    
+                # Clean memory after loading
+                cleanup_memory(aggressive=True)
+                
+            elif is_sdxl:
                 print("  → Detected SDXL model, using StableDiffusionXLPipeline")
+                
+                # Clean before loading
+                cleanup_memory(aggressive=False)
+                
                 pipe = StableDiffusionXLPipeline.from_pretrained(
                     model_name,
                     torch_dtype=self.dtype,
                     variant="fp16" if self.dtype == torch.float16 else None,
-                    use_safetensors=True
+                    use_safetensors=True,
+                    low_cpu_mem_usage=True
                 )
+                pipe = pipe.to(self.device)
+                pipe.enable_attention_slicing()
+                
+                try:
+                    pipe.enable_vae_slicing()
+                    print("  → Enabled VAE slicing")
+                except:
+                    pass
+                    
             else:
                 print("  → Using StableDiffusionPipeline")
                 pipe = StableDiffusionPipeline.from_pretrained(
                     model_name,
                     torch_dtype=self.dtype,
                     safety_checker=None,
-                    requires_safety_checker=False
+                    requires_safety_checker=False,
+                    low_cpu_mem_usage=True
                 )
-            pipe = pipe.to(self.device)
-            pipe.enable_attention_slicing()
+                pipe = pipe.to(self.device)
+                pipe.enable_attention_slicing()
+            
             return pipe
         
         pipeline, success = self.retry_operation("Base Pipeline Load", load_fn)
@@ -259,7 +393,19 @@ class ImageGenerator:
         
         self.pipeline = pipeline
         self.metadata["model"] = model_name
-        self.metadata["pipeline_type"] = "StableDiffusionXLPipeline" if is_sdxl else "StableDiffusionPipeline"
+        
+        if is_sd3:
+            self.metadata["pipeline_type"] = "DiffusionPipeline (SD 3.5)"
+            self.metadata["memory_optimizations"] = "attention_slicing,vae_slicing,aggressive_cleanup"
+        elif is_sdxl:
+            self.metadata["pipeline_type"] = "StableDiffusionXLPipeline"
+            self.metadata["memory_optimizations"] = "attention_slicing,vae_slicing"
+        else:
+            self.metadata["pipeline_type"] = "StableDiffusionPipeline"
+            self.metadata["memory_optimizations"] = "attention_slicing"
+        
+        # Log memory after loading
+        log_memory_status("After model load")
         
     def apply_lora(self):
         """Apply LoRA weights if specified"""
@@ -355,7 +501,7 @@ class ImageGenerator:
             return None
     
     def generate_images(self, control_image=None):
-        """Generate images with retry logic"""
+        """Generate images with retry logic and memory management"""
         prompt = self.args.prompt
         negative_prompt = self.args.negative_prompt or ""
         
@@ -371,6 +517,12 @@ class ImageGenerator:
         self.metadata["seed"] = self.args.seed
         self.metadata["steps"] = self.args.steps
         self.metadata["num_images"] = self.args.n
+        
+        # Memory cleanup before generation (especially important for SD 3.5)
+        if self.is_sd3:
+            print("🧹 Cleaning memory before generation...")
+            cleanup_memory(aggressive=True)
+            log_memory_status("Before generation")
         
         # Set seed
         generator = torch.Generator(device=self.device).manual_seed(self.args.seed)
@@ -397,6 +549,14 @@ class ImageGenerator:
         
         if not success:
             raise RuntimeError("Image generation failed after multiple retries")
+        
+        # Memory cleanup after generation
+        if self.is_sd3:
+            print("🧹 Cleaning memory after generation...")
+            cleanup_memory(aggressive=True)
+            log_memory_status("After generation")
+        else:
+            cleanup_memory(aggressive=False)
         
         return images
     
@@ -437,9 +597,18 @@ class ImageGenerator:
             return image
     
     def refine_image(self, image):
-        """Refine image using refiner model"""
+        """Refine image using refiner model with memory management"""
         if not self.args.refiner:
             return image
+        
+        # Unload main pipeline to free memory for refiner (especially for SD 3.5)
+        if self.is_sd3:
+            print("🧹 Unloading main pipeline to free memory for refiner...")
+            if self.pipeline is not None:
+                del self.pipeline
+                self.pipeline = None
+            cleanup_memory(aggressive=True)
+            log_memory_status("Before refiner load")
         
         def refine_fn():
             from diffusers import StableDiffusionImg2ImgPipeline, StableDiffusionXLImg2ImgPipeline
@@ -454,7 +623,8 @@ class ImageGenerator:
                 refiner = StableDiffusionXLImg2ImgPipeline.from_pretrained(
                     self.args.refiner,
                     torch_dtype=self.dtype,
-                    variant="fp16" if self.dtype == torch.float16 else None
+                    variant="fp16" if self.dtype == torch.float16 else None,
+                    low_cpu_mem_usage=True
                 )
             else:
                 # Use standard pipeline for SD 1.5/2.x models
@@ -462,11 +632,20 @@ class ImageGenerator:
                     self.args.refiner,
                     torch_dtype=self.dtype,
                     safety_checker=None,
-                    requires_safety_checker=False
+                    requires_safety_checker=False,
+                    low_cpu_mem_usage=True
                 )
             
             refiner = refiner.to(self.device)
             refiner.enable_attention_slicing()
+            
+            try:
+                refiner.enable_vae_slicing()
+            except:
+                pass
+            
+            # Store refiner for later cleanup
+            self.refiner_pipeline = refiner
             
             refined = refiner(
                 prompt=self.args.prompt,
@@ -474,6 +653,12 @@ class ImageGenerator:
                 strength=0.3,
                 num_inference_steps=20
             ).images[0]
+            
+            # Cleanup refiner after use
+            if self.is_sd3:
+                del refiner
+                self.refiner_pipeline = None
+                cleanup_memory(aggressive=True)
             
             return refined
         
@@ -515,19 +700,33 @@ class ImageGenerator:
         return image_path
     
     def run(self):
-        """Main execution flow"""
+        """Main execution flow with comprehensive memory management"""
         start_time = time.time()
         
         try:
+            # Check available memory before starting (for SD 3.5)
+            if self.is_sd3 or (hasattr(self.args, 'use_sd3') and self.args.use_sd3):
+                mem_info = get_memory_info()
+                if "error" not in mem_info:
+                    available_gb = mem_info["system_available_gb"]
+                    if available_gb < 30:
+                        print(f"⚠️  WARNING: Low memory detected ({available_gb:.1f}GB available)")
+                        print(f"   SD 3.5 requires 36GB+ RAM. Generation may fail or be very slow.")
+                        print(f"   Consider using --quality 4k-ultra (SDXL) instead for better performance.")
+                        self.log_warning(f"Low memory: {available_gb:.1f}GB available (36GB+ recommended for SD 3.5)")
+            
             # Load base pipeline
             self.load_base_pipeline()
             
             # Apply LoRA if specified
             if self.args.lora:
                 self.apply_lora()
+                cleanup_memory(aggressive=self.is_sd3)
             
             # Setup ControlNet if specified
             control_image = self.setup_controlnet()
+            if control_image is not None:
+                cleanup_memory(aggressive=self.is_sd3)
             
             # Generate images
             images = self.generate_images(control_image)
@@ -535,15 +734,28 @@ class ImageGenerator:
             # Post-process each image
             final_images = []
             for i, image in enumerate(images):
+                print(f"\n📸 Processing image {i+1}/{len(images)}")
+                
                 # Refine
                 if self.args.refiner:
                     image = self.refine_image(image)
+                    cleanup_memory(aggressive=self.is_sd3)
                 
                 # Upscale
                 if self.args.upscale and self.args.upscale > 1:
                     image = self.upscale_image(image)
+                    cleanup_memory(aggressive=self.is_sd3)
                 
                 final_images.append(image)
+            
+            # Final cleanup before saving
+            if self.pipeline is not None:
+                del self.pipeline
+                self.pipeline = None
+            if self.refiner_pipeline is not None:
+                del self.refiner_pipeline
+                self.refiner_pipeline = None
+            cleanup_memory(aggressive=True)
             
             # Save all images
             generation_time = time.time() - start_time
@@ -552,6 +764,9 @@ class ImageGenerator:
             for i, image in enumerate(final_images, 1):
                 path = self.save_image(image, i, generation_time)
                 saved_paths.append(path)
+            
+            # Log final memory state
+            log_memory_status("Complete")
             
             print(f"\n{'='*60}")
             print(f"✓ Generation complete!")
@@ -569,6 +784,17 @@ class ImageGenerator:
             print(f"\n{'='*60}")
             print(f"✗ FATAL ERROR: {str(e)}")
             print(f"{'='*60}")
+            
+            # Emergency cleanup
+            try:
+                if self.pipeline is not None:
+                    del self.pipeline
+                if self.refiner_pipeline is not None:
+                    del self.refiner_pipeline
+                cleanup_memory(aggressive=True)
+            except:
+                pass
+            
             return 1
 
 def main():
@@ -601,6 +827,10 @@ Examples:
     # Core arguments
     parser.add_argument("prompt", type=str, help="Text prompt for generation")
     
+    # Pro mode - SD 3.5 Large Turbo (shortcut)
+    parser.add_argument("--pro", action="store_true", 
+                       help="Use SD 3.5 Large Turbo (best quality, fast, 8 steps, requires HF auth)")
+    
     # Quality preset (easy mode!)
     parser.add_argument("--quality", type=str, 
                        choices=["fast", "quality", "hd", "max", "ultra", "ultra-hd", "4k", "4k-ultra", "photorealistic", "ultra-realistic", "cinematic", "lcm"],
@@ -630,6 +860,26 @@ Examples:
     parser.add_argument("--refiner", type=str, help="Refiner model name (e.g., 'runwayml/stable-diffusion-v1-5' for SD1.5 compatible)")
     
     args = parser.parse_args()
+    
+    # Handle --pro flag (shortcut for SD 3.5 Large Turbo)
+    if args.pro:
+        if not args.model:
+            args.model = "stabilityai/stable-diffusion-3.5-large-turbo"
+        if not hasattr(args, 'steps_override') or not args.steps_override:
+            args.steps = 8  # Optimized for Turbo model (4-8 steps recommended)
+        args.use_sd3 = True
+        print("Pro mode enabled: Using SD 3.5 Large Turbo")
+        print("⚠️  REQUIREMENTS:")
+        print("   • 20GB+ RAM recommended (works on all Apple Silicon)")
+        print("   • HF authentication (run ./login-hf.sh)")
+        print("   • Must accept license at: https://huggingface.co/stabilityai/stable-diffusion-3.5-large-turbo")
+        print("   • ~2-5 min per image (much faster than regular SD 3.5)")
+        print("\n🧠 MEMORY OPTIMIZATIONS ENABLED:")
+        print("   • Aggressive memory cleanup between stages")
+        print("   • Attention slicing and VAE slicing")
+        print("   • Pipeline unloading before refiner/upscale")
+        print("   • Continuous memory monitoring")
+        print()
     
     # Track if user explicitly set steps (to avoid overriding with preset)
     # Check if steps was explicitly passed by user

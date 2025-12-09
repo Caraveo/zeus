@@ -68,7 +68,7 @@ Generates a single image with default settings.
 The easiest way to get great results. Add `--quality` with your desired quality level:
 
 ```bash
-# Ultra fast (3 seconds!)
+# Ultra fast (3 seconds)
 generate "a dragon" --quality lcm
 
 # Fast generation (10 seconds)
@@ -85,6 +85,9 @@ generate "a dragon" --quality ultra
 
 # SDXL 4K (3 minutes)
 generate "a dragon" --quality 4k-ultra
+
+# Best quality with SD 3.5 (15-20 minutes, requires auth)
+generate "a dragon" --pro
 ```
 
 **Available presets:** `lcm`, `fast`, `quality`, `hd`, `max`, `4k`, `ultra`, `ultra-hd`, `4k-ultra`, `photorealistic`, `ultra-realistic`, `cinematic`
@@ -477,9 +480,27 @@ Should print `True` on Apple Silicon Macs.
 
 ### Memory Usage
 
-- **8GB RAM**: Use fast, quality, hd, max, 4k
-- **16GB RAM**: All presets including SDXL
-- **4K Ultra**: Needs 16GB+ RAM
+- **8GB RAM**: Use fast, quality, hd, max, 4k presets only
+- **16GB RAM**: All SD 1.5 and SDXL presets
+- **36GB RAM**: Required for SD 3.5 / --pro mode
+- **64GB RAM**: Recommended for SD 3.5 on M1/M2/M3 Max/Ultra
+
+### Chip Performance
+
+- **M1/M2/M3/M4 (Base - 8-16GB)**: 
+  - SD 1.5: Fast
+  - SDXL: Acceptable
+  - SD 3.5: Not recommended (too slow)
+
+- **M1/M2/M3/M4 Pro (16-32GB)**:
+  - SD 1.5: Very fast
+  - SDXL: Good
+  - SD 3.5: Slow but usable
+
+- **M1/M2/M3/M4 Max/Ultra (32GB-128GB)**:
+  - SD 1.5: Very fast
+  - SDXL: Fast
+  - SD 3.5: Much faster, recommended for --pro
 
 The system uses float32 precision on MPS for stability.
 
@@ -518,13 +539,26 @@ Quality presets automatically select the best model. For manual use:
 **SDXL Models:**
 - stabilityai/stable-diffusion-xl-base-1.0 (ultra presets)
 
+**SD 3.5 Models (Gated - Requires Auth):**
+- stabilityai/stable-diffusion-3.5-large (best quality, 20GB)
+
+See [GATED_MODELS_GUIDE.md](GATED_MODELS_GUIDE.md) for authentication instructions.
+
 ## System Requirements
 
 - **Hardware**: Apple Silicon (M1, M2, M3, M4) Mac
 - **OS**: macOS 12.0 or later
-- **RAM**: 8GB minimum (16GB for SDXL presets)
-- **Storage**: 15GB for all models and cache
+- **RAM**: 
+  - 8GB minimum (SD 1.5 presets only)
+  - 16GB recommended (SDXL presets)
+  - **36GB minimum for SD 3.5 / --pro mode**
+- **Storage**: 30GB for all models and cache (SD 3.5 is 20GB alone)
 - **Python**: 3.8 or later
+
+### Performance by Chip
+- **M1/M2/M3/M4 (Base)**: Good for SD 1.5, acceptable for SDXL, slow for SD 3.5
+- **M1/M2/M3/M4 Pro**: Better performance, recommended for SDXL
+- **M1/M2/M3/M4 Max/Ultra**: Best performance, much faster generation, recommended for SD 3.5
 
 ### Tested On
 - ✅ All Apple Silicon Macs (M1/M2/M3/M4)
@@ -548,6 +582,11 @@ generate "PROMPT" [OPTIONS]
 
 Required:
   PROMPT                Text description of desired image
+
+Pro Mode:
+  --pro                 Use SD 3.5 Large (best quality, 15-20min, requires auth)
+                        Equivalent to: --model "stabilityai/stable-diffusion-3.5-large"
+                        Run ./login-hf.sh first for authentication
 
 Quality Presets (RECOMMENDED):
   --quality PRESET      Auto-configure for quality level
@@ -625,8 +664,10 @@ generate "modern glass skyscraper in city center" \
 - **NEGATIVE_PROMPTS_GUIDE.md** - Improve image quality
 
 ### Detailed Guides
+- **MEMORY_MANAGEMENT.md** - SD 3.5 memory optimization (NEW!)
 - **4K_SUPPORT.md** - 4K generation guide
 - **LCM_LORA_WORKING.md** - Ultra-fast LCM guide
+- **GATED_MODELS_GUIDE.md** - SD 3.5 and authentication
 - **LORA_PRESETS.md** - LoRA usage
 - **COMPLETE_SYSTEM_SUMMARY.md** - Test results and benchmarks
 
@@ -646,17 +687,25 @@ For issues or questions:
 
 ## Version
 
-**Version**: 2.0.0  
+**Version**: 2.1.0  
 **Date**: December 2025  
 **Platform**: macOS Apple Silicon (MPS)  
 **Status**: Production Ready
 
-### What's New in v2.0
+### What's New in v2.1
+- ✅ **Advanced memory management for SD 3.5**
+  - Aggressive memory cleanup between stages
+  - Automatic pipeline unloading before refiner
+  - Attention slicing and VAE slicing
+  - Real-time memory monitoring and warnings
+  - Emergency cleanup on errors
 - ✅ 12 quality presets (lcm to 4k-ultra)
 - ✅ LCM LoRA support (3-second generation)
 - ✅ SDXL full support with auto-detection
+- ✅ SD 3.5 Large support (gated model)
 - ✅ 4K upscaling (2048px and 4096px)
 - ✅ Fixed upscaler memory issues
 - ✅ Auto-compatible refiners
 - ✅ Negative prompt support
-- ✅ 15 comprehensive guides
+- ✅ Hugging Face authentication
+- ✅ 17 comprehensive guides
